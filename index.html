@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理画面 - 商品マスタ & 注文一覧</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Meiryo;padding:16px;background:#f6f8fb;color:#111}
+  .wrap{max-width:1100px;margin:0 auto}
+  .tabs{display:flex;gap:8px;margin-bottom:12px}
+  .tab{padding:8px 12px;border-radius:8px;cursor:pointer;background:#fff;border:1px solid #e6eefc}
+  .tab.active{background:#1976d2;color:#fff}
+  .card{background:#fff;padding:12px;border-radius:10px;box-shadow:0 6px 18px rgba(20,30,60,0.04)}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{padding:8px;border-bottom:1px solid #eef2f7;text-align:left}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  input[type=text], input[type=number]{padding:8px;border:1px solid #e6eefc;border-radius:8px}
+  .btn{background:#1976d2;color:#fff;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .btn.ghost{background:#f1f5f9;color:#111;border:1px solid #e6eefc}
+  .small{font-size:0.9rem;color:#666}
+  #ordersTable th{font-weight:700}
+  .filter{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>管理画面</h2>
+  <div class="tabs">
+    <div id="tabProducts" class="tab active">商品マスタ</div>
+    <div id="tabOrders" class="tab">注文一覧</div>
+  </div>
+
+  <div id="panelProducts" class="card">
+    <h3>商品マスタ（編集）</h3>
+    <div class="row">
+      <input id="origin" placeholder="産地" style="width:160px">
+      <input id="pname" placeholder="商品名" style="width:240px">
+      <input id="spec" placeholder="規格" style="width:130px">
+      <input id="pack" type="number" min="1" placeholder="入り数" style="width:90px">
+      <input id="price" type="number" min="0" placeholder="単価" style="width:110px">
+      <button id="addBtn" class="btn">追加</button>
+      <button id="refreshProducts" class="btn ghost">再読み込み</button>
+    </div>
+
+    <table id="prodTable">
+      <thead><tr><th>産地</th><th>商品名</th><th>規格</th><th>入り数</th><th>単価</th><th>操作</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="panelOrders" class="card" style="display:none; margin-top:12px">
+    <h3>注文一覧</h3>
+    <div class="filter">
+      <input id="filterNumber" placeholder="番号で検索" style="width:160px">
+      <input id="filterName" placeholder="名前で検索" style="width:200px">
+      <button id="btnFilter" class="btn ghost">フィルタ</button>
+      <button id="btnClear" class="btn ghost">解除</button>
+      <div style="margin-left:auto" class="small">全件: <span id="ordersCount">0</span></div>
+    </div>
+    <div style="overflow:auto;max-height:420px">
+      <table id="ordersTable">
+        <thead><tr><th>日時</th><th>番号</th><th>名前</th><th>商品名</th><th>産地</th><th>規格</th><th>入り数</th><th>単価</th><th>数量</th><th>小計</th><th>合計</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'https://script.google.com/macros/s/AKfycbxuj2S_XibNn_TbLNH46cJHg79VoQbGvVGwbKTn0mxKULioCxUkrAXl0ORGRj75L_tD/exec'; // ←ここを置き換えてください（例: https://script.google.com/macros/s/AKfy.../exec）
+
+// DOM
+const tabProducts = document.getElementById('tabProducts');
+const tabOrders = document.getElementById('tabOrders');
+const panelProducts = document.getElementById('panelProducts');
+const panelOrders = document.getElementById('panelOrders');
+const tbodyProd = document.querySelector('#prodTable tbody');
+const addBtn = document.getElementById('addBtn');
+const refreshProducts = document.getElementById('refreshProducts');
+
+tabProducts.onclick = ()=>{ tabProducts.classList.add('active'); tabOrders.classList.remove('active'); panelProducts.style.display='block'; panelOrders.style.display='none'; }
+tabOrders.onclick = ()=>{ tabOrders.classList.add('active'); tabProducts.classList.remove('active'); panelProducts.style.display='none'; panelOrders.style.display='block'; loadOrders(); }
+
+async function apiGetProducts(){ const res = await fetch(API_BASE + '?action=getProducts'); return res.json(); }
+async function apiAddProduct(prod){ const res = await fetch(API_BASE, { method:'POST', body: JSON.stringify({ action:'add', product: prod }) }); return res.json(); }
+async function apiUpdateProduct(prod){ const res = await fetch(API_BASE, { method:'POST', body: JSON.stringify({ action:'update', product: prod }) }); return res.json(); }
+async function apiDeleteProduct(id){ const res = await fetch(API_BASE, { method:'POST', body: JSON.stringify({ action:'delete', id }) }); return res.json(); }
+async function apiGetOrders(){ const res = await fetch(API_BASE + '?action=getOrders'); return res.json(); }
+
+let products = [];
+
+function escapeHtml(s){ return String(s||'').replace(/[&<>"]+/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c] || c); }
+
+async function loadProducts(){
+  try{
+    const j = await apiGetProducts();
+    if(!j.success) throw new Error(j.error||'API error');
+    products = j.products;
+    renderTable();
+  }catch(e){ alert('商品読み込みエラー: '+e.message); console.error(e); }
+}
+
+function renderTable(){
+  tbodyProd.innerHTML='';
+  products.forEach(p=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(p.origin)}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.spec||'')}</td><td>${p.pack}</td><td>¥${Number(p.price).toLocaleString()}</td>
+      <td>
+        <button data-id='${p.id}' class='editBtn btn ghost'>編集</button>
+        <button data-id='${p.id}' class='delBtn btn ghost'>削除</button>
+      </td>`;
+    tbodyProd.appendChild(tr);
+  });
+  attachProdHandlers();
+}
+
+function attachProdHandlers(){
+  document.querySelectorAll('.delBtn').forEach(b=> b.onclick = async ()=>{ if(!confirm('削除しますか？')) return; const id = +b.dataset.id; try{ const r = await apiDeleteProduct(id); if(r.success) { await loadProducts(); alert('削除しました'); } else alert('削除失敗'); }catch(e){ alert('通信エラー'); }});
+  document.querySelectorAll('.editBtn').forEach(b=> b.onclick = async ()=>{ const id = +b.dataset.id; const p = products.find(x=>x.id===id); if(!p) return alert('見つかりません'); const origin = prompt('産地', p.origin); if(origin===null) return; const name = prompt('商品名', p.name); if(name===null) return; const spec = prompt('規格', p.spec||''); if(spec===null) return; const pack = prompt('入り数', p.pack); if(pack===null) return; const price = prompt('単価', p.price); if(price===null) return; const updatedBy = prompt('更新者名（任意）',''); const upd = { id, origin: origin.trim(), name: name.trim(), spec: spec.trim(), pack: Number(pack)||1, price: Number(price)||0, updatedBy: updatedBy||'' }; try{ const res = await apiUpdateProduct(upd); if(res.success){ await loadProducts(); alert('更新しました'); } else alert('更新失敗'); }catch(e){ alert('通信エラー'); }});
+}
+
+addBtn.onclick = async ()=>{
+  const origin = document.getElementById('origin').value.trim();
+  const name = document.getElementById('pname').value.trim();
+  const spec = document.getElementById('spec').value.trim();
+  const pack = Number(document.getElementById('pack').value) || 1;
+  const price = Number(document.getElementById('price').value) || 0;
+  if(!origin || !name) return alert('産地と商品名は必須です');
+  const updatedBy = prompt('更新者名（任意）','');
+  try{
+    const r = await apiAddProduct({ origin, name, spec, pack, price, updatedBy: updatedBy||'' });
+    if(r.success){ await loadProducts(); document.getElementById('origin').value=''; document.getElementById('pname').value=''; document.getElementById('spec').value=''; document.getElementById('pack').value=''; document.getElementById('price').value=''; alert('追加しました'); }
+    else alert('追加失敗');
+  }catch(e){ alert('通信エラー'); }
+};
+refreshProducts.onclick = ()=> loadProducts();
+
+// --------------- 注文一覧 ---------------
+const ordersTbody = document.querySelector('#ordersTable tbody');
+const ordersCountEl = document.getElementById('ordersCount');
+const filterNumber = document.getElementById('filterNumber');
+const filterName = document.getElementById('filterName');
+const btnFilter = document.getElementById('btnFilter');
+const btnClear = document.getElementById('btnClear');
+
+let orders = [];
+
+async function loadOrders(){
+  try{
+    const j = await apiGetOrders();
+    if(!j.success) throw new Error(j.error||'API error');
+    orders = j.orders;
+    renderOrders(orders);
+  }catch(e){ alert('注文一覧の読み込みに失敗しました: '+e.message); console.error(e); }
+}
+
+function renderOrders(list){
+  ordersTbody.innerHTML = '';
+  list.forEach(o=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(o.date)}</td><td>${escapeHtml(o.number)}</td><td>${escapeHtml(o.name)}</td>
+      <td>${escapeHtml(o.productName)}</td><td>${escapeHtml(o.origin)}</td><td>${escapeHtml(o.spec)}</td>
+      <td>${escapeHtml(o.pack)}</td><td>${escapeHtml(o.price)}</td><td>${escapeHtml(o.quantity)}</td><td>${escapeHtml(o.subtotal)}</td><td>${escapeHtml(o.total)}</td>`;
+    ordersTbody.appendChild(tr);
+  });
+  ordersCountEl.textContent = list.length;
+}
+
+btnFilter.onclick = ()=>{
+  const n = filterNumber.value.trim().toLowerCase();
+  const nm = filterName.value.trim().toLowerCase();
+  const filtered = orders.filter(o=>{
+    if(n && String(o.number||'').toLowerCase().indexOf(n)===-1) return false;
+    if(nm && String(o.name||'').toLowerCase().indexOf(nm)===-1) return false;
+    return true;
+  });
+  renderOrders(filtered);
+};
+btnClear.onclick = ()=>{ filterNumber.value=''; filterName.value=''; renderOrders(orders); }
+
+// 初期読み込み
+loadProducts();
+</script>
+</body>
+</html>
