@@ -50,8 +50,8 @@
   <div id="panelOrders" class="card" style="display:none; margin-top:12px">
     <h3>注文一覧</h3>
     <div class="filter">
-      <input id="filterNumber" placeholder="番号で検索" style="width:160px">
-      <input id="filterName" placeholder="名前で検索" style="width:200px">
+      <input id="filterNumber" placeholder="店番で検索" style="width:160px">
+      <input id="filterName" placeholder="店舗名検索" style="width:200px">
       <button id="btnFilter" class="btn ghost">フィルタ</button>
       <button id="btnClear" class="btn ghost">解除</button>
       <div style="margin-left:auto" class="small">全件: <span id="ordersCount">0</span></div>
@@ -66,7 +66,8 @@
 </div>
 
 <script>
-const API_BASE = 'https://script.google.com/macros/s/AKfycbxuj2S_XibNn_TbLNH46cJHg79VoQbGvVGwbKTn0mxKULioCxUkrAXl0ORGRj75L_tD/exec'; // ←ここを置き換えてください（例: https://script.google.com/macros/s/AKfy.../exec）
+const API_BASE = 'https://script.google.com/macros/s/AKfycbz841T07OuGVY-mgG3LqCxup2TA4aNKqbFCNF_oX02dmaaDIjOJPBNvLBgZzKN2WlVd/exec';
+//const API_BASE = 'https://script.google.com/macros/s/AKfycbxuj2S_XibNn_TbLNH46cJHg79VoQbGvVGwbKTn0mxKULioCxUkrAXl0ORGRj75L_tD/exec'; // ←ここを置き換えてください（例: https://script.google.com/macros/s/AKfy.../exec）
 
 // DOM
 const tabProducts = document.getElementById('tabProducts');
@@ -179,6 +180,15 @@ btnClear.onclick = ()=>{ filterNumber.value=''; filterName.value=''; renderOrder
 
 // 初期読み込み
 loadProducts();
+// --- 追加 ---
+if (location.hash === '#panelOrders') {
+  tabOrders.classList.add('active');
+  tabProducts.classList.remove('active');
+  panelProducts.style.display = 'none';
+  panelOrders.style.display = 'block';
+  loadOrders();
+}
+
 </script>
 </body>
 </html>
